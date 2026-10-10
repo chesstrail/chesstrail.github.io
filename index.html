@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trilha do Xadrez</title>
+  <meta name="description" content="Aprenda xadrez do zero, de graça: lições guiadas com exercícios no tabuleiro, puzzles que acompanham o seu nível e partidas contra o computador com revisão dos erros.">
+  <meta name="theme-color" content="#7c9a83">
+  <meta property="og:title" content="Trilha do Xadrez">
+  <meta property="og:description" content="Lições, puzzles e partidas contra o computador para aprender xadrez do zero.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="assets/pieces/wN.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&family=Zilla+Slab:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="modulepreload" href="vendor/chess.js">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/"><img class="brand-mark" src="assets/pieces/wN.svg" alt=""><span class="brand-name">Trilha do Xadrez</span></a>
+    <nav class="nav" aria-label="Principal">
+      <a href="#/">Trilha</a>
+      <a href="#/puzzles">Puzzles</a>
+      <a href="#/jogar">Jogar</a>
+    </nav>
+    <span class="streak" id="streak"></span>
+  </header>
+  <main id="app"><p style="padding:40px 16px">Carregando…</p></main>
+  <footer class="footer">
+    <p>Seu progresso fica salvo neste navegador, sem conta e sem cadastro.</p>
+    <p>Peças <a href="https://github.com/lichess-org/lila">cburnett</a> (GPLv2+) · motor <a href="https://stockfishchess.org">Stockfish</a> (GPL-3) · regras <a href="https://github.com/jhlywa/chess.js">chess.js</a> (BSD-2) · puzzles do <a href="https://database.lichess.org/#puzzles">banco aberto do Lichess</a> (CC0) · código sob GPL-3.</p>
+  </footer>
+  <noscript><p style="padding:16px">Este site precisa de JavaScript para mostrar o tabuleiro.</p></noscript>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
