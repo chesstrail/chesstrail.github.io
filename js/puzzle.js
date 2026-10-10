@@ -6,7 +6,7 @@ import { Chess, legalDests, tryMove, sync, parseUci, uci } from "./rules.js";
 export const TEMAS_PT = {
   mate: "mate", mateIn1: "mate em 1", mateIn2: "mate em 2", backRankMate: "mate na última fileira",
   hangingPiece: "peça solta", fork: "garfo", pin: "cravada", skewer: "espeto", discoveredAttack: "ataque descoberto",
-  doubleCheck: "xeque duplo", promotion: "promoção", pawnEndgame: "final de peões", endgame: "final",
+  doubleCheck: "xeque duplo", promotion: "promoção", pawnEndgame: "final de peões", rookEndgame: "final de torres", queenEndgame: "final de damas", defensiveMove: "lance defensivo", endgame: "final",
   middlegame: "meio-jogo", opening: "abertura", short: "curto", long: "longo",
 };
 
@@ -73,6 +73,7 @@ export function runPuzzle(board, puzzle, cb = {}) {
     },
     solucao() {
       if (done) return;
+      clearTimeout(timer); // cancela o lance do adversário que estava para sair: a solução segue daqui
       errou = true;
       done = true;
       const passo = () => {

@@ -255,3 +255,8 @@ h3 { font-size: 20px; }
   .stat { min-width: 0; padding: 10px 12px; }
   .stat dt { font-size: 12px; }
 }
+
+/* comentários das linhas de abertura */
+.notas { display: grid; gap: 8px; margin-top: 12px; }
+.notas p { margin: 0; padding: 10px 12px; border-left: 3px solid var(--gold); background: var(--gold-soft); border-radius: 0 6px 6px 0; font-size: 15px; line-height: 1.45; }
+.notas .notation { margin-right: 4px; }

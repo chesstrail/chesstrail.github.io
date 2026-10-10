@@ -1,6 +1,6 @@
 # Trilha do Xadrez
 
-Site gratuito para aprender xadrez do zero: 22 lições guiadas em 4 níveis, puzzles táticos que se ajustam ao seu nível e partidas contra o computador (8 níveis) com revisão dos erros. O progresso fica salvo no navegador.
+Site gratuito para aprender xadrez do zero: 39 lições guiadas em 6 níveis (do movimento das peças a tática, finais, aberturas e defesas), puzzles táticos que se ajustam ao seu nível e partidas contra o computador (8 níveis) com revisão dos erros. O progresso fica salvo no navegador.
 
 Site estático, sem build: abra `index.html` por um servidor local (`python3 -m http.server`).
 

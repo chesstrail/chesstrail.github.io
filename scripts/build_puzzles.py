@@ -38,6 +38,10 @@ TEMAS = {
     "doubleCheck": (20, 1700),
     "promotion": (25, 1500),
     "pawnEndgame": (25, 1600),
+    "rookEndgame": (25, 1700),
+    "queenEndgame": (15, 1800),
+    "defensiveMove": (25, 1500),
+    "opening": (25, 1400),
 }
 
 

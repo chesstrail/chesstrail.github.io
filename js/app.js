@@ -113,7 +113,7 @@ function telaLicao(id) {
   const resetBoard = (fen, opts = {}) => {
     board.opts.getDests = null; board.opts.onMove = null; board.opts.onSquareClick = null;
     board.opts.interactive = opts.interactive !== false;
-    board.setOrientation(opts.cor || "w");
+    board.setOrientation(opts.cor || L.cor || "w");
     board.setArrows([]); board.setTargets([]); board.setHint(null); board.setLastMove(null); board.setCheck(null);
     board.setFen(fen || "8/8/8/8/8/8/8/8 w - - 0 1");
   };
@@ -244,19 +244,50 @@ function telaLicao(id) {
 
     if (s.t === "vencer") {
       const game = new Chess(s.fen);
-      const cor = game.turn();
+      const cor = game.turn(), outro = cor === "w" ? "b" : "w";
       resetBoard(s.fen, { cor });
       sync(board, game);
       let lances = 0, pensando = false, acabou = false;
       box.innerHTML = `<p>${s.instrucao}</p><p class="notation" id="conta" style="display:inline-block">0 de ${s.limite} lances</p>`;
-      const reiniciar = botao("Recomeçar", "", () => passo());
-      botoes([reiniciar]);
-      const conferir = () => {
-        if (s.objetivo === "mate" && game.isCheckmate()) return "ok";
-        if (s.objetivo === "promover" && game.history({ verbose: true }).some((m) => m.promotion)) return "ok";
-        if (game.isGameOver()) return game.isStalemate() ? "afogou" : "empate";
-        if (lances >= s.limite) return "limite";
-        return null;
+      botoes([botao("Recomeçar", "", () => passo())]);
+      const pecas = (c) => game.board().flat().filter((x) => x && x.color === c).map((x) => x.type);
+      // "antes": logo depois do seu lance; "depois": depois da resposta do computador
+      const avaliar = (fase) => {
+        if (game.isCheckmate()) return game.turn() === cor ? "perdeu" : "ok";
+        if (game.isGameOver()) return s.objetivo === "segurar" ? "ok" : game.isStalemate() ? "afogou" : "empate";
+        if (fase === "antes") return null;
+        const meu = pecas(cor), dele = pecas(outro);
+        if (s.objetivo === "segurar") {
+          if (dele.includes("q") || !meu.includes("r")) return "perdeu";
+          return lances >= s.limite ? "ok" : null;
+        }
+        if (s.objetivo === "promover" && game.history({ verbose: true }).some((m) => m.promotion && m.color === cor)) {
+          const VAL = { q: 9, r: 5, b: 3, n: 3, p: 1, k: 0 }, soma = (l) => l.reduce((t, x) => t + VAL[x], 0);
+          if (soma(meu) - soma(dele) >= 5) return "ok"; // a peça nova sobreviveu: vantagem decisiva
+          // o adversário entregou a peça para tirar a dama: se dá para recapturar, a vitória continua
+          const ult = game.history({ verbose: true }).at(-1);
+          const promo = game.history({ verbose: true }).filter((m) => m.promotion && m.color === cor).at(-1);
+          const recaptura = ult.to === promo.to && ult.piece !== "k" && game.isAttacked(ult.to, cor);
+          return recaptura && soma(meu) - (soma(dele) - VAL[ult.piece]) >= 5 ? "ok-troca" : "perdeu-dama";
+        }
+        if (s.objetivo === "capturar") {
+          if (dele.includes("q")) return "perdeu";
+          if (dele.length === 1) return meu.includes("q") ? "ok" : "perdeu-dama";
+        }
+        return lances >= s.limite ? "limite" : null;
+      };
+      const OK = {
+        mate: () => `Xeque-mate em ${lances} lances!`,
+        promover: () => "Coroou, e a peça nova está a salva!",
+        capturar: () => "O peão caiu! Com dama contra rei, o mate é só técnica.",
+        segurar: () => (game.isGameOver() ? "Empate garantido!" : `Você segurou ${s.limite} lances. Com essa defesa, o empate está garantido.`),
+      };
+      const FALHA = {
+        perdeu: s.objetivo === "segurar" ? "A defesa caiu desta vez. Lembre: torre na sexta, e xeques por trás quando o peão avançar." : "Não deu desta vez.",
+        "perdeu-dama": "A peça nova foi capturada. Tente de novo, com cuidado na hora de coroar.",
+        afogou: "Afogamento: o rei adversário ficou sem lances e sem xeque. É empate.",
+        empate: "A partida empatou.",
+        limite: `Passou de ${s.limite} lances.`,
       };
       board.opts.getDests = (sq) => (acabou || pensando || game.turn() !== cor ? [] : legalDests(game, sq));
       board.opts.onMove = async (from, to, promo) => {
@@ -265,23 +296,72 @@ function telaLicao(id) {
         lances++;
         sync(board, game);
         box.querySelector("#conta").textContent = `${lances} de ${s.limite} lances`;
-        let r = conferir();
+        let r = avaliar("antes");
         if (!r) {
           pensando = true;
           const { best } = await analyze({ fen: game.fen(), depth: 10 });
           pensando = false;
-          if (best && !acabou) { const b = parseUci(best); game.move({ from: b.from, to: b.to, promotion: b.promotion }); sync(board, game); }
-          r = conferir() === "ok" ? null : conferir();
+          if (acabou) return true;
+          if (best) { const b = parseUci(best); game.move({ from: b.from, to: b.to, promotion: b.promotion }); sync(board, game); }
+          r = avaliar("depois");
         }
-        if (r === "ok") { acabou = true; concluirPasso(s.objetivo === "mate" ? `Xeque-mate em ${lances} lances!` : "Promoveu! Agora é só dar o mate."); }
+        if (r === "ok-troca") { acabou = true; board.setArrows([]); concluirPasso("Coroou! O adversário capturou a peça nova, mas é só recapturar: você fica com vantagem decisiva."); }
+        else if (r === "ok") { acabou = true; concluirPasso(OK[s.objetivo]()); }
         else if (r) {
           acabou = true;
-          feedback("bad", r === "afogou" ? "Afogamento: o rei preto ficou sem lances e sem xeque. É empate." : r === "limite" ? `Passou de ${s.limite} lances.` : "A partida empatou.");
+          feedback("bad", FALHA[r]);
           botoes([botao("Tentar de novo", "primary", () => passo())]);
         }
         return true;
       };
       limpeza = () => { acabou = true; };
+    }
+
+    if (s.t === "linha") {
+      const cor = s.cor || "w", lista = s.lances.map((x) => (Array.isArray(x) ? x : [x, null]));
+      const game = new Chess();
+      resetBoard(game.fen(), { cor });
+      let i = 0, erros = 0, timer = null, fim = false;
+      box.innerHTML = `<p>${s.instrucao}</p><div class="moves" id="linha"></div><div class="notas" id="notas"></div>`;
+      const linhaEl = box.querySelector("#linha"), notasEl = box.querySelector("#notas");
+      const mostrar = () => {
+        const hist = game.history();
+        linhaEl.innerHTML = hist.map((x, k) => (k % 2 === 0 ? `<span class="n">${k / 2 + 1}.</span>` : "") + `<span>${sanPt(x)}</span> `).join("") || "&nbsp;";
+        // comentários dos dois últimos lances (o seu e a resposta)
+        notasEl.innerHTML = s.sozinho ? "" : [i - 2, i - 1].filter((k) => k >= 0 && lista[k][1])
+          .map((k) => `<p><strong class="notation">${k % 2 === 0 ? k / 2 + 1 + "." : (k - 1) / 2 + 1 + "..."}${sanPt(lista[k][0])}</strong> ${lista[k][1]}</p>`).join("");
+      };
+      const vezDoLivro = () => {
+        if (fim) return;
+        if (i >= lista.length) { fim = true; concluirPasso(s.sozinho ? "Linha completa, de memória!" : "Linha completa!"); return; }
+        if (game.turn() !== cor) timer = setTimeout(() => { game.move(lista[i][0]); i++; sync(board, game); mostrar(); vezDoLivro(); }, i === 0 ? 450 : 650);
+      };
+      board.opts.getDests = (sq) => (!fim && game.turn() === cor ? legalDests(game, sq) : []);
+      board.opts.onMove = (from, to, promo) => {
+        const m = tryMove(game, from, to, promo);
+        if (!m) return false;
+        if (m.san !== lista[i][0]) {
+          game.undo();
+          erros++;
+          board.flash(to, "bad");
+          const certo = new Chess(game.fen()).move(lista[i][0]);
+          if (erros >= 2) board.setArrows([{ from: certo.from, to: certo.to }]);
+          feedback("bad", erros >= 2 ? `Nesta linha, o lance é <span class="notation">${sanPt(certo.san)}</span> (veja a seta).` : "Não é o lance desta linha. Pense no plano da abertura e tente de novo.");
+          return false;
+        }
+        erros = 0;
+        i++;
+        board.setArrows([]);
+        feedback();
+        sync(board, game);
+        mostrar();
+        vezDoLivro();
+        return true;
+      };
+      sync(board, game);
+      mostrar();
+      vezDoLivro();
+      limpeza = () => { fim = true; clearTimeout(timer); };
     }
   }
 
