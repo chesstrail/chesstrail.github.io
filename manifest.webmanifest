@@ -1,6 +1,6 @@
 {
-  "name": "Trilha do Xadrez",
-  "short_name": "Xadrez",
+  "name": "Chess Trail",
+  "short_name": "Chess Trail",
   "description": "Aprenda xadrez do zero: lições, puzzles, aberturas, finais e partidas contra o computador.",
   "lang": "pt-BR",
   "start_url": "./",

@@ -1,4 +1,4 @@
-# Trilha do Xadrez
+# Chess Trail
 
 Site gratuito para aprender xadrez do zero: 39 lições guiadas em 6 níveis (do movimento das peças a tática, finais, aberturas e defesas), puzzles táticos que se ajustam ao seu nível e partidas contra o computador (8 níveis) com revisão dos erros. O progresso fica salvo no navegador (com um código para levar a outro aparelho), as aberturas e os puzzles errados voltam numa revisão espaçada, e o site pode ser instalado no celular e usado sem internet.
 

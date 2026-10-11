@@ -47,7 +47,7 @@ function telaInicio() {
   app.innerHTML = "";
   const hero = h(`<section class="hero">
     <div>
-      <p class="eyebrow">Trilha do Xadrez</p>
+      <p class="eyebrow">Chess Trail</p>
       <h1>Aprenda xadrez do zero, no seu ritmo.</h1>
       <p class="lead">Lições curtas com exercícios no tabuleiro, puzzles de partidas reais que acompanham o seu nível e partidas contra o computador com revisão dos erros.</p>
       <div class="btn-row" style="margin-top:20px">
@@ -783,7 +783,15 @@ function rota() {
   else if (pagina === "revisar") telaRevisar();
   else telaInicio();
   topo();
-  document.title = (pagina === "licao" && licao(arg) ? licao(arg).titulo + " · " : pagina === "puzzles" ? "Puzzles · " : pagina === "jogar" ? "Jogar · " : pagina === "revisar" ? "Revisar · " : "") + "Trilha do Xadrez";
+  document.title = (pagina === "licao" && licao(arg) ? licao(arg).titulo + " · " : pagina === "puzzles" ? "Puzzles · " : pagina === "jogar" ? "Jogar · " : pagina === "revisar" ? "Revisar · " : "") + "Chess Trail";
 }
-window.addEventListener("hashchange", rota);
+// progresso vindo do endereço antigo: o redirecionamento manda o código no link (#importar=TX1...)
+async function importarDoLink() {
+  const m = location.hash.match(/^#importar=(.+)$/);
+  if (!m) return;
+  try { progresso.mesclar(P, await progresso.importar(decodeURIComponent(m[1]))); progresso.save(P); } catch { /* código ruim: segue sem ele */ }
+  history.replaceState(null, "", location.pathname + location.search + "#/");
+}
+window.addEventListener("hashchange", () => (location.hash.startsWith("#importar=") ? importarDoLink().then(rota) : rota()));
+await importarDoLink();
 rota();

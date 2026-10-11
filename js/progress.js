@@ -49,7 +49,7 @@ export async function importar(codigo) {
     if (typeof DecompressionStream !== "function") throw new Error("Este navegador é antigo demais para ler o código. Atualize-o e tente de novo.");
     bytes = await passar(unb64(corpo), new DecompressionStream("deflate-raw"));
   } else if (tipo === "TX0.") bytes = unb64(corpo);
-  else throw new Error("Esse não parece um código de progresso da Trilha do Xadrez.");
+  else throw new Error("Esse não parece um código de progresso da Chess Trail.");
   const p = JSON.parse(new TextDecoder().decode(bytes));
   if (!p || typeof p !== "object" || !p.licoes) throw new Error("O código está incompleto.");
   return Object.assign(vazio(), p);

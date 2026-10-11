@@ -59,7 +59,7 @@ def main():
     por_tema = {t: [] for t in TEMAS}
     usados = set()
     lidos = 0
-    req = urllib.request.Request(URL, headers={"User-Agent": "TrilhaDoXadrez/1.0"})
+    req = urllib.request.Request(URL, headers={"User-Agent": "ChessTrail/1.0"})
     with urllib.request.urlopen(req, timeout=120) as resposta:
         leitor = zstandard.ZstdDecompressor().stream_reader(resposta)
         texto = io.TextIOWrapper(leitor, encoding="utf-8")

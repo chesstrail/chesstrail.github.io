@@ -1,7 +1,7 @@
 // Funciona sem internet: guarda o site inteiro no aparelho na primeira visita.
 // Código e dados: busca a versão nova na rede e cai no que está guardado se não houver
 // conexão. Peças, motor e fontes: usa o guardado direto (não mudam).
-const CACHE = "trilha-v1";
+const CACHE = "chesstrail-v1";
 const ARQUIVOS = [
   "./", "index.html", "manifest.webmanifest", "css/app.css",
   "js/app.js", "js/board.js", "js/engine.js", "js/lessons.js", "js/linha.js", "js/progress.js", "js/puzzle.js", "js/revisao.js", "js/rules.js",
