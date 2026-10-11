@@ -260,3 +260,34 @@ h3 { font-size: 20px; }
 .notas { display: grid; gap: 8px; margin-top: 12px; }
 .notas p { margin: 0; padding: 10px 12px; border-left: 3px solid var(--gold); background: var(--gold-soft); border-radius: 0 6px 6px 0; font-size: 15px; line-height: 1.45; }
 .notas .notation { margin-right: 4px; }
+
+/* lição: no computador, cabeçalho e painel ficam à direita do tabuleiro;
+   no celular, o cabeçalho sobe para cima do tabuleiro e as instruções vêm logo abaixo */
+.trainer.licao { grid-template-areas: "board head" "board side"; grid-template-rows: auto 1fr; row-gap: 16px; }
+.trainer.licao .lesson-head { grid-area: head; }
+.trainer.licao .lesson-board { grid-area: board; }
+.trainer.licao .side { grid-area: side; }
+.lesson-head .steps { margin-top: 14px; }
+@media (max-width: 860px) {
+  .trainer.licao { grid-template-areas: "head" "board" "side"; grid-template-rows: auto; row-gap: 10px; }
+  .trainer.licao .lesson-head { padding: 10px 14px; display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px; }
+  .trainer.licao .lesson-head .eyebrow { grid-column: 1 / -1; margin: 0; font-size: 11px; }
+  .trainer.licao .lesson-head h2 { font-size: 20px; margin: 2px 0 0; }
+  .trainer.licao .lesson-head .steps { margin: 0; width: min(38vw, 160px); }
+  .trainer.licao .side { gap: 10px; }
+  .trainer.licao #passo { padding: 12px 14px; }
+}
+
+/* contador da revisão no menu */
+.badge { display: inline-block; min-width: 18px; margin-left: 5px; padding: 1px 5px; border-radius: 999px; background: var(--gold); color: #fff; font: 700 11px/16px var(--font-mono); text-align: center; vertical-align: 1px; }
+
+/* código de progresso */
+.codigo textarea { width: 100%; margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: 13px/1.4 var(--font-mono); resize: vertical; word-break: break-all; }
+.codigo .btn-row { margin-top: 12px; }
+.codigo #cod-fb { margin-top: 12px; }
+@media (max-width: 860px) {
+  .trainer.licao #passo p { margin: 0 0 8px; }
+  .trainer.licao .choices { gap: 8px; margin-top: 8px; }
+  .trainer.licao .choice { padding: 10px 14px; font-size: 16px; }
+  .trainer.licao .feedback { padding: 10px 14px; }
+}

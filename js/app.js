@@ -4,6 +4,8 @@ import { NIVEIS, LICOES, licao } from "./lessons.js";
 import { runPuzzle, TEMAS_PT } from "./puzzle.js";
 import { analyze, whiteCp } from "./engine.js";
 import * as progresso from "./progress.js";
+import { runLinha } from "./linha.js";
+import * as revisao from "./revisao.js";
 
 const app = document.getElementById("app");
 const P = progresso.load();
@@ -22,6 +24,9 @@ function topo() {
   const st = document.getElementById("streak"), dias = progresso.sequencia(P);
   st.innerHTML = `<b>${dias}</b> ${dias === 1 ? "dia seguido" : "dias seguidos"}`;
   st.title = `Treinou ${dias} ${dias === 1 ? "dia seguido" : "dias seguidos"}`;
+  const n = revisao.pendentes(P).length, badge = document.getElementById("rev-badge");
+  badge.textContent = n;
+  badge.hidden = !n;
   const rota = location.hash.split("/")[1] || "";
   document.querySelectorAll(".nav a").forEach((a) => {
     const alvo = a.getAttribute("href").split("/")[1] || "";
@@ -47,6 +52,7 @@ function telaInicio() {
       <p class="lead">Lições curtas com exercícios no tabuleiro, puzzles de partidas reais que acompanham o seu nível e partidas contra o computador com revisão dos erros.</p>
       <div class="btn-row" style="margin-top:20px">
         ${prox ? `<a class="btn primary" href="#/licao/${prox.id}">${feitas ? "Continuar" : "Começar"}: ${prox.titulo}</a>` : `<a class="btn primary" href="#/puzzles">Trilha concluída — treinar puzzles</a>`}
+        ${revisao.pendentes(P).length ? `<a class="btn gold" href="#/revisar">Revisar (${revisao.pendentes(P).length})</a>` : ""}
         <a class="btn" href="#/puzzles">Puzzles</a>
         <a class="btn" href="#/jogar">Jogar</a>
       </div>
@@ -77,6 +83,44 @@ function telaInicio() {
     });
     app.appendChild(sec);
   });
+  app.appendChild(secaoCodigo());
+}
+
+// levar o progresso para outro aparelho, sem conta: um código para copiar e colar
+function secaoCodigo() {
+  const sec = h(`<section class="level codigo" aria-labelledby="cod">
+    <div class="level-head"><div><p class="eyebrow">Seu progresso</p><h2 id="cod">Levar para outro aparelho</h2>
+    <p>O progresso fica salvo só neste navegador. Para continuar em outro celular ou computador, copie o código aqui e cole lá. Nada se perde: os dois progressos se juntam.</p></div></div>
+    <div class="btn-row"><button type="button" class="btn" id="copiar">Copiar meu código</button><button type="button" class="btn" id="abrir-colar">Colar um código</button></div>
+    <div id="colar" hidden><textarea id="cod-txt" rows="3" spellcheck="false" autocomplete="off" aria-label="Código de progresso" placeholder="Cole aqui o código que começa com TX"></textarea>
+    <div class="btn-row"><button type="button" class="btn primary" id="restaurar">Juntar ao meu progresso</button></div></div>
+    <div id="cod-fb" aria-live="polite"></div>
+  </section>`);
+  const fb = (tipo, txt) => sec.querySelector("#cod-fb").innerHTML = `<div class="feedback ${tipo}">${txt}</div>`;
+  sec.querySelector("#copiar").addEventListener("click", async () => {
+    const codigo = await progresso.exportar(P);
+    try { await navigator.clipboard.writeText(codigo); fb("ok", "Código copiado! Abra o site no outro aparelho e use <strong>Colar um código</strong>."); }
+    catch {
+      // sem acesso à área de transferência: mostra o código para copiar à mão
+      sec.querySelector("#colar").hidden = false;
+      const t = sec.querySelector("#cod-txt"); t.value = codigo; t.select();
+      fb("info", "Copie o código selecionado acima.");
+    }
+  });
+  sec.querySelector("#abrir-colar").addEventListener("click", () => { sec.querySelector("#colar").hidden = false; sec.querySelector("#cod-txt").focus(); });
+  sec.querySelector("#restaurar").addEventListener("click", async () => {
+    try {
+      const outro = await progresso.importar(sec.querySelector("#cod-txt").value);
+      progresso.mesclar(P, outro);
+      salvar();
+      telaInicio();
+      const nova = app.querySelector(".codigo");
+      const nl = Object.keys(P.licoes).length;
+      nova.querySelector("#cod-fb").innerHTML = `<div class="feedback ok">Progresso juntado: ${nl} ${nl === 1 ? "lição concluída" : "lições concluídas"}, nível ${Math.round(P.puzzle.rating)} nos puzzles.</div>`;
+      nova.scrollIntoView({ block: "center" });
+    } catch (e) { fb("bad", e.message.startsWith("Esse") || e.message.startsWith("Este") || e.message.startsWith("O código") ? e.message : "Não consegui ler esse código. Confira se ele foi copiado inteiro."); }
+  });
+  return sec;
 }
 
 // ======================= lição =======================
@@ -85,14 +129,14 @@ function telaLicao(id) {
   if (!L) { location.hash = "#/"; return; }
   const n = LICOES.indexOf(L) + 1;
   app.innerHTML = "";
-  const tela = h(`<div class="trainer">
-    <div><div class="board-wrap"></div></div>
+  const tela = h(`<div class="trainer licao">
+    <div class="panel lesson-head">
+      <p class="eyebrow">Nível ${L.nivel} · Lição ${n} de ${LICOES.length}</p>
+      <h2>${L.titulo}</h2>
+      <div class="steps">${L.passos.map(() => "<i></i>").join("")}</div>
+    </div>
+    <div class="lesson-board"><div class="board-wrap"></div></div>
     <div class="side">
-      <div class="panel">
-        <p class="eyebrow">Nível ${L.nivel} · Lição ${n} de ${LICOES.length}</p>
-        <h2>${L.titulo}</h2>
-        <div class="steps" style="margin-top:14px">${L.passos.map(() => "<i></i>").join("")}</div>
-      </div>
       <div class="panel prose" id="passo" aria-live="polite"></div>
       <div id="fb" aria-live="polite"></div>
       <div class="btn-row" id="acoes"></div>
@@ -236,8 +280,9 @@ function telaLicao(id) {
             onTurn: () => {},
             onWrong: () => feedback("bad", "Não é esse lance. Olhe de novo: o que está atacado, o que está sem defesa?"),
             onProgress: () => feedback("info", "Boa! Continue: ainda há lances na sequência."),
-            onSolved: ({ mostrado }) => {
-              feedback(mostrado ? "info" : "ok", mostrado ? "Essa era a solução." : "Resolvido!");
+            onSolved: ({ limpo, mostrado }) => {
+              if (!limpo) { revisao.adicionar(P, { tipo: "puzzle", puzzle: lista[j] }); salvar(); }
+              feedback(mostrado ? "info" : "ok", mostrado ? "Essa era a solução. Este exercício vai voltar na revisão." : limpo ? "Resolvido!" : "Resolvido, com ajuda. Ele vai voltar na revisão.");
               botoes([botao(j + 1 < lista.length ? "Próximo exercício" : "Continuar", "primary", () => { j++; um(); })]);
             },
           });
@@ -325,50 +370,18 @@ function telaLicao(id) {
     }
 
     if (s.t === "linha") {
-      const cor = s.cor || "w", lista = s.lances.map((x) => (Array.isArray(x) ? x : [x, null]));
-      const game = new Chess();
-      resetBoard(game.fen(), { cor });
-      let i = 0, erros = 0, timer = null, fim = false;
+      resetBoard(new Chess().fen(), { cor: s.cor });
       box.innerHTML = `<p>${s.instrucao}</p><div class="moves" id="linha"></div><div class="notas" id="notas"></div>`;
-      const linhaEl = box.querySelector("#linha"), notasEl = box.querySelector("#notas");
-      const mostrar = () => {
-        const hist = game.history();
-        linhaEl.innerHTML = hist.map((x, k) => (k % 2 === 0 ? `<span class="n">${k / 2 + 1}.</span>` : "") + `<span>${sanPt(x)}</span> `).join("") || "&nbsp;";
-        // comentários dos dois últimos lances (o seu e a resposta)
-        notasEl.innerHTML = s.sozinho ? "" : [i - 2, i - 1].filter((k) => k >= 0 && lista[k][1])
-          .map((k) => `<p><strong class="notation">${k % 2 === 0 ? k / 2 + 1 + "." : (k - 1) / 2 + 1 + "..."}${sanPt(lista[k][0])}</strong> ${lista[k][1]}</p>`).join("");
-      };
-      const vezDoLivro = () => {
-        if (fim) return;
-        if (i >= lista.length) { fim = true; concluirPasso(s.sozinho ? "Linha completa, de memória!" : "Linha completa!"); return; }
-        if (game.turn() !== cor) timer = setTimeout(() => { game.move(lista[i][0]); i++; sync(board, game); mostrar(); vezDoLivro(); }, i === 0 ? 450 : 650);
-      };
-      board.opts.getDests = (sq) => (!fim && game.turn() === cor ? legalDests(game, sq) : []);
-      board.opts.onMove = (from, to, promo) => {
-        const m = tryMove(game, from, to, promo);
-        if (!m) return false;
-        if (m.san !== lista[i][0]) {
-          game.undo();
-          erros++;
-          board.flash(to, "bad");
-          const certo = new Chess(game.fen()).move(lista[i][0]);
-          if (erros >= 2) board.setArrows([{ from: certo.from, to: certo.to }]);
-          feedback("bad", erros >= 2 ? `Nesta linha, o lance é <span class="notation">${sanPt(certo.san)}</span> (veja a seta).` : "Não é o lance desta linha. Pense no plano da abertura e tente de novo.");
-          return false;
-        }
-        erros = 0;
-        i++;
-        board.setArrows([]);
-        feedback();
-        sync(board, game);
-        mostrar();
-        vezDoLivro();
-        return true;
-      };
-      sync(board, game);
-      mostrar();
-      vezDoLivro();
-      limpeza = () => { fim = true; clearTimeout(timer); };
+      const ctl = runLinha(board, s, { linha: box.querySelector("#linha"), notas: box.querySelector("#notas") }, {
+        onWrong: (msg) => feedback("bad", msg),
+        onOk: () => feedback(),
+        onDone: () => {
+          // a linha de memória entra na revisão espaçada
+          if (s.sozinho) { revisao.adicionar(P, { tipo: "linha", licao: L.id, passo: k }); salvar(); }
+          concluirPasso(s.sozinho ? "Linha completa, de memória! Ela vai voltar na revisão daqui a alguns dias." : "Linha completa!");
+        },
+      });
+      limpeza = () => ctl.destroy();
     }
   }
 
@@ -445,6 +458,7 @@ function telaPuzzles() {
         P.puzzle.resolvidos++;
         if (limpo) P.puzzle.acertos++;
         P.puzzle.vistos = P.puzzle.vistos.concat(pz[0]).slice(-500);
+        if (!limpo) revisao.adicionar(P, { tipo: "puzzle", puzzle: pz });
         progresso.treinou(P);
         salvar();
         tela.querySelector("#rating").textContent = Math.round(P.puzzle.rating);
@@ -677,6 +691,87 @@ function telaJogar() {
   atual = () => { vivo = false; };
 }
 
+// ======================= revisão espaçada =======================
+function telaRevisar() {
+  app.innerHTML = "";
+  const fila = revisao.pendentes(P).filter((r) => r.tipo === "puzzle" || licao(r.licao)?.passos[r.passo]?.t === "linha");
+  const tela = h(`<div class="trainer">
+    <div><div class="board-wrap"></div></div>
+    <div class="side">
+      <div class="panel">
+        <p class="eyebrow">Revisão</p>
+        <h2 id="rev-titulo"></h2>
+        <p class="lead" style="font-size:16px;margin-top:6px">O que você aprendeu volta aos poucos: acertou, ele demora mais para voltar (1, 3, 7, 14, 30 dias…); errou, volta amanhã.</p>
+      </div>
+      <div class="panel prose" id="passo" aria-live="polite"></div>
+      <div id="fb" aria-live="polite"></div>
+      <div class="btn-row" id="acoes"></div>
+    </div></div>`);
+  app.appendChild(tela);
+  const board = novoTabuleiro(tela.querySelector(".board-wrap"), {});
+  const box = tela.querySelector("#passo"), fb = tela.querySelector("#fb"), acoes = tela.querySelector("#acoes"), titulo = tela.querySelector("#rev-titulo");
+  const feedback = (tipo, txt) => { fb.innerHTML = txt ? `<div class="feedback ${tipo}">${txt}</div>` : ""; };
+  const botao = (txt, cls, fn) => { const b = h(`<button type="button" class="btn ${cls}">${txt}</button>`); b.addEventListener("click", fn); return b; };
+  let j = 0, ctl = null, acertos = 0;
+  board.setFen(new Chess().fen());
+
+  const fimDaFila = () => {
+    const total = Object.keys(P.revisao || {}).length, prox = revisao.proximaData(P);
+    titulo.textContent = fila.length ? "Revisão do dia feita!" : "Nada para revisar hoje";
+    const quando = prox ? new Date(prox + "T12:00").toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }) : null;
+    box.innerHTML = (fila.length ? `<p>Você acertou <strong>${acertos} de ${fila.length}</strong>.</p>` : "") +
+      (total ? `<p>${total} ${total === 1 ? "item está" : "itens estão"} na sua revisão. O próximo volta ${prox <= progresso.hoje() ? "hoje" : "na <strong>" + quando + "</strong>"}.</p>`
+        : `<p>A revisão se enche sozinha: as aberturas que você joga de memória nas lições e os puzzles que você errou ou resolveu com ajuda.</p>`);
+    feedback();
+    acoes.innerHTML = "";
+    acoes.appendChild(h(`<a class="btn primary" href="#/">Voltar à trilha</a>`));
+    acoes.appendChild(h(`<a class="btn" href="#/puzzles">Puzzles</a>`));
+  };
+
+  const proximo = () => {
+    if (ctl) ctl.destroy();
+    ctl = null;
+    feedback();
+    acoes.innerHTML = "";
+    if (j >= fila.length) return fimDaFila();
+    const r = fila[j];
+    titulo.textContent = `${j + 1} de ${fila.length}`;
+    const terminar = (acertou, msg) => {
+      revisao.registrar(P, r.k, acertou);
+      if (acertou) acertos++;
+      progresso.treinou(P);
+      salvar();
+      feedback(acertou ? "ok" : "info", msg);
+      acoes.innerHTML = "";
+      const b = botao(j + 1 < fila.length ? "Próximo" : "Concluir", "primary", () => { j++; proximo(); });
+      acoes.appendChild(b);
+      b.focus({ preventScroll: true });
+    };
+    if (r.tipo === "linha") {
+      const L = licao(r.licao), s = L.passos[r.passo];
+      box.innerHTML = `<p><strong>${L.titulo}</strong> · jogue a linha de memória com as ${s.cor === "b" ? "pretas" : "brancas"}.</p><div class="moves" id="linha"></div>`;
+      board.setLastMove(null); board.setCheck(null); board.setTargets([]);
+      ctl = runLinha(board, { ...s, sozinho: true }, { linha: box.querySelector("#linha") }, {
+        onWrong: (msg) => feedback("bad", msg),
+        onOk: () => feedback(),
+        onDone: ({ erros }) => terminar(erros === 0, erros === 0 ? "Sem erros! Esta linha volta daqui a mais tempo." : `Linha completa, com ${erros} ${erros === 1 ? "erro" : "erros"}. Ela volta amanhã.`),
+      });
+    } else {
+      box.innerHTML = `<p><strong>Puzzle que você errou</strong>${r.puzzle[4] ? " · " + r.puzzle[4].split(" ").filter((t) => TEMAS_PT[t] && !["short", "long", "middlegame", "endgame", "opening"].includes(t)).map((t) => TEMAS_PT[t]).join(", ") : ""}</p><p id="vez"></p>`;
+      ctl = runPuzzle(board, r.puzzle, {
+        onWrong: () => feedback("bad", "Não é esse lance. Tente de novo."),
+        onProgress: () => feedback("info", "Boa! A sequência continua."),
+        onSolved: ({ limpo, mostrado }) => terminar(limpo, limpo ? "Resolvido! Ele volta daqui a mais tempo." : mostrado ? "Essa era a solução. Ele volta amanhã." : "Resolvido, com ajuda. Ele volta amanhã."),
+      });
+      box.querySelector("#vez").textContent = `Você joga com as ${ctl.jogador === "w" ? "brancas" : "pretas"}. Espere o lance do adversário.`;
+      acoes.appendChild(botao("Dica", "", () => ctl.dica()));
+      acoes.appendChild(botao("Ver solução", "", () => ctl.solucao()));
+    }
+  };
+  proximo();
+  atual = () => ctl && ctl.destroy();
+}
+
 // ======================= rotas =======================
 function rota() {
   if (atual) { atual(); atual = null; }
@@ -685,9 +780,10 @@ function rota() {
   if (pagina === "licao") telaLicao(arg);
   else if (pagina === "puzzles") telaPuzzles();
   else if (pagina === "jogar") telaJogar();
+  else if (pagina === "revisar") telaRevisar();
   else telaInicio();
   topo();
-  document.title = (pagina === "licao" && licao(arg) ? licao(arg).titulo + " · " : pagina === "puzzles" ? "Puzzles · " : pagina === "jogar" ? "Jogar · " : "") + "Trilha do Xadrez";
+  document.title = (pagina === "licao" && licao(arg) ? licao(arg).titulo + " · " : pagina === "puzzles" ? "Puzzles · " : pagina === "jogar" ? "Jogar · " : pagina === "revisar" ? "Revisar · " : "") + "Trilha do Xadrez";
 }
 window.addEventListener("hashchange", rota);
 rota();
