@@ -6,14 +6,35 @@ import { analyze, whiteCp } from "./engine.js";
 import * as progresso from "./progress.js";
 import { runLinha } from "./linha.js";
 import * as revisao from "./revisao.js";
+import * as sons from "./sons.js";
+import * as metas from "./metas.js";
 
 const app = document.getElementById("app");
 const P = progresso.load();
+sons.ligar(P.sons !== false);
 let atual = null; // limpeza da tela anterior (timers, partida)
 let puzzlesData = null;
 
 const h = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
-const salvar = () => { progresso.save(P); topo(); };
+const salvar = () => {
+  const novas = metas.verificar(P);
+  progresso.save(P);
+  topo();
+  if (novas.length === 1) aviso(`${novas[0].icone} Conquista: <strong>${novas[0].titulo}</strong>`);
+  else if (novas.length > 1) aviso(`🏅 ${novas.length} conquistas novas! Veja na página inicial.`);
+};
+// pontos da meta do dia; avisa quando a meta é batida
+const pontuar = (tipo) => {
+  if (metas.pontuar(P, tipo)) { sons.vitoria(); aviso(`🎯 Meta do dia batida! ${metas.pontosHoje(P)} pontos hoje.`); }
+};
+// aviso que aparece embaixo da tela por alguns segundos
+function aviso(html) {
+  let box = document.getElementById("avisos");
+  if (!box) { box = h(`<div id="avisos" class="avisos" role="status" aria-live="polite"></div>`); document.body.appendChild(box); }
+  const el = h(`<div class="aviso">${html}</div>`);
+  box.appendChild(el);
+  setTimeout(() => { el.classList.add("sai"); setTimeout(() => el.remove(), 400); }, 3800);
+}
 const proximaLicao = () => LICOES.find((l) => !P.licoes[l.id]) || null;
 async function puzzles() {
   if (!puzzlesData) puzzlesData = await fetch("data/puzzles.json").then((r) => r.json());
@@ -22,15 +43,17 @@ async function puzzles() {
 
 function topo() {
   const st = document.getElementById("streak"), dias = progresso.sequencia(P);
+  const pts = metas.pontosHoje(P), meta = metas.metaDoDia(P);
   st.innerHTML = `<b>${dias}</b> ${dias === 1 ? "dia seguido" : "dias seguidos"}`;
-  st.title = `Treinou ${dias} ${dias === 1 ? "dia seguido" : "dias seguidos"}`;
+  st.classList.toggle("meta-ok", pts >= meta);
+  st.title = `Treinou ${dias} ${dias === 1 ? "dia seguido" : "dias seguidos"} · meta do dia: ${Math.min(pts, meta)} de ${meta} pontos`;
   const n = revisao.pendentes(P).length, badge = document.getElementById("rev-badge");
   badge.textContent = n;
   badge.hidden = !n;
   const rota = location.hash.split("/")[1] || "";
   document.querySelectorAll(".nav a").forEach((a) => {
     const alvo = a.getAttribute("href").split("/")[1] || "";
-    a.toggleAttribute("aria-current", alvo === rota || (alvo === "" && rota === "licao"));
+    a.toggleAttribute("aria-current", alvo === rota || (alvo === "" && rota === "licao") || (alvo === "jogar" && rota === "analisar"));
     if (a.hasAttribute("aria-current")) a.setAttribute("aria-current", "page");
   });
 }
@@ -55,12 +78,14 @@ function telaInicio() {
         ${revisao.pendentes(P).length ? `<a class="btn gold" href="#/revisar">Revisar (${revisao.pendentes(P).length})</a>` : ""}
         <a class="btn" href="#/puzzles">Puzzles</a>
         <a class="btn" href="#/jogar">Jogar</a>
+        <a class="btn" href="#/analisar">Analisar partida</a>
       </div>
       <dl class="stats">
         <div class="stat"><dt>Lições concluídas</dt><dd>${feitas}<small style="font-size:16px;color:var(--muted)"> de ${LICOES.length}</small></dd></div>
         <div class="stat"><dt>Nível nos puzzles</dt><dd>${Math.round(P.puzzle.rating)}</dd></div>
         <div class="stat"><dt>Dias seguidos</dt><dd>${progresso.sequencia(P)}</dd></div>
       </dl>
+      ${cartaoMeta()}
     </div>
     <div class="hero-board"></div>
   </section>`);
@@ -83,7 +108,57 @@ function telaInicio() {
     });
     app.appendChild(sec);
   });
+  app.appendChild(secaoConquistas());
+  app.appendChild(secaoPreferencias());
   app.appendChild(secaoCodigo());
+}
+
+function cartaoMeta() {
+  const pts = metas.pontosHoje(P), meta = metas.metaDoDia(P), pct = Math.min(100, Math.round(pts / meta * 100));
+  const P_ = metas.PONTOS;
+  return `<div class="meta-dia${pts >= meta ? " ok" : ""}">
+    <div class="meta-topo"><strong>🎯 Meta do dia</strong><span>${Math.min(pts, meta)} de ${meta} pontos${pts >= meta ? " · batida!" : ""}</span></div>
+    <div class="progressbar" role="progressbar" aria-valuemin="0" aria-valuemax="${meta}" aria-valuenow="${Math.min(pts, meta)}" aria-label="Meta do dia"><i style="width:${pct}%"></i></div>
+    <p>Lição ${P_.licao} pts · partida ${P_.partida} · análise ${P_.analise} · puzzle ${P_.puzzle} · revisão ${P_.revisao}</p>
+  </div>`;
+}
+
+function secaoConquistas() {
+  const ganhas = metas.CONQUISTAS.filter((c) => P.conquistas?.[c.id]).length;
+  const sec = h(`<section class="level" aria-labelledby="conq">
+    <div class="level-head"><div><p class="eyebrow">Conquistas</p><h2 id="conq">Suas medalhas</h2></div><span class="level-count">${ganhas}/${metas.CONQUISTAS.length}</span></div>
+    <ul class="conquistas"></ul></section>`);
+  for (const c of metas.CONQUISTAS) {
+    const em = P.conquistas?.[c.id];
+    sec.querySelector(".conquistas").appendChild(h(`<li class="conquista${em ? " ganha" : ""}" title="${c.desc}">
+      <span class="ic" aria-hidden="true">${c.icone}</span><span class="t">${c.titulo}</span><span class="d">${em ? "Desde " + new Date(em + "T12:00").toLocaleDateString("pt-BR") : c.desc}</span></li>`));
+  }
+  return sec;
+}
+
+function secaoPreferencias() {
+  const atual = P.meta || "leve";
+  const sec = h(`<section class="level prefs" aria-labelledby="prefs">
+    <div class="level-head"><div><p class="eyebrow">Preferências</p><h2 id="prefs">Do seu jeito</h2></div></div>
+    <p style="margin:0 0 6px;font-weight:700">Meta do dia</p>
+    <div class="seg" id="metas">${Object.entries(metas.METAS).map(([k, m]) => `<button type="button" data-m="${k}" aria-pressed="${k === atual}">${m.nome} (${m.pontos})</button>`).join("")}</div>
+    <p style="margin:16px 0 6px;font-weight:700">Sons</p>
+    <div class="seg" id="sons"><button type="button" data-s="1" aria-pressed="${sons.estaLigado()}">Ligados</button><button type="button" data-s="0" aria-pressed="${!sons.estaLigado()}">Desligados</button></div>
+  </section>`);
+  sec.querySelectorAll("#metas button").forEach((b) => b.addEventListener("click", () => {
+    P.meta = b.dataset.m;
+    salvar();
+    sec.querySelectorAll("#metas button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    const c = app.querySelector(".meta-dia"); if (c) c.outerHTML = cartaoMeta();
+  }));
+  sec.querySelectorAll("#sons button").forEach((b) => b.addEventListener("click", () => {
+    P.sons = b.dataset.s === "1";
+    sons.ligar(P.sons);
+    salvar();
+    sec.querySelectorAll("#sons button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    sons.acerto();
+  }));
+  return sec;
 }
 
 // levar o progresso para outro aparelho, sem conta: um código para copiar e colar
@@ -150,7 +225,7 @@ function telaLicao(id) {
   const botao = (txt, cls, fn) => { const b = h(`<button type="button" class="btn ${cls}">${txt}</button>`); b.addEventListener("click", fn); return b; };
   const marcarPassos = () => tela.querySelectorAll(".steps i").forEach((el, i) => el.className = i < k ? "done" : i === k ? "now" : "");
   const concluirPasso = (msg) => {
-    if (msg) feedback("ok", msg);
+    if (msg) { feedback("ok", msg); sons.acerto(); }
     const prox = LICOES[n] || null;
     if (k + 1 < L.passos.length) botoes([botao("Continuar", "primary", () => { k++; passo(); })]);
     else if (prox) botoes([
@@ -204,6 +279,7 @@ function telaLicao(id) {
       board.opts.getDests = (sq) => (pecas[sq] === "w" + s.mover && alvos.length ? freeDests(pecas, sq) : []);
       board.opts.onMove = (from, to) => {
         const p = pecas[from];
+        if (pecas[to]) sons.captura(); else sons.lance();
         delete pecas[from];
         pecas[to] = p;
         lances++;
@@ -388,6 +464,7 @@ function telaLicao(id) {
   function marcarConcluida() {
     P.licoes[L.id] = { em: Date.now() };
     progresso.treinou(P);
+    pontuar("licao");
     salvar();
   }
   function concluirLicao() {
@@ -459,6 +536,8 @@ function telaPuzzles() {
         if (limpo) P.puzzle.acertos++;
         P.puzzle.vistos = P.puzzle.vistos.concat(pz[0]).slice(-500);
         if (!limpo) revisao.adicionar(P, { tipo: "puzzle", puzzle: pz });
+        if (limpo) sons.acerto();
+        pontuar("puzzle");
         progresso.treinou(P);
         salvar();
         tela.querySelector("#rating").textContent = Math.round(P.puzzle.rating);
@@ -488,6 +567,61 @@ function telaPuzzles() {
   atual = () => ctl && ctl.destroy();
 }
 
+// ======================= análise de partidas (usada no Jogar e no Analisar) =======================
+// Avalia cada posição uma vez e mede quanto cada lance perdeu em relação ao melhor lance.
+async function analisarLances(lances, fens, cores, onProgresso, vivo) {
+  const precisa = new Set();
+  lances.forEach((m, i) => { if (cores.includes(m.color)) { precisa.add(i); precisa.add(i + 1); } });
+  const ordem = [...precisa].sort((a, b) => a - b), av = {};
+  for (let k = 0; k < ordem.length; k++) {
+    if (!vivo()) return null;
+    const i = ordem[k], g = new Chess(fens[i]);
+    if (g.isGameOver()) av[i] = { best: null, cp: g.isCheckmate() ? (g.turn() === "w" ? -10000 : 10000) : 0 };
+    else { const r = await analyze({ fen: fens[i], depth: 10 }); av[i] = { best: r.best, cp: whiteCp(r.score, fens[i]) }; }
+    onProgresso((k + 1) / ordem.length);
+  }
+  const clamp = (v) => Math.max(-1500, Math.min(1500, v)), achados = [];
+  lances.forEach((m, i) => {
+    if (!cores.includes(m.color) || !av[i].best) return;
+    const perda = av[i].best === uci(m) ? 0 : (m.color === "w" ? 1 : -1) * (clamp(av[i].cp) - clamp(av[i + 1].cp));
+    if (perda < 110) return;
+    const bm = parseUci(av[i].best), melhor = new Chess(fens[i]).move({ from: bm.from, to: bm.to, promotion: bm.promotion });
+    achados.push({ i, m, antes: fens[i], perda, melhor: melhor.san, bm });
+  });
+  return achados;
+}
+
+// lista de erros: tocar num item mostra a posição antes do lance, com a seta do melhor lance
+function listaDeErros(achados, board, status, quem) {
+  const lista = h(`<ul class="review-list"></ul>`);
+  achados.forEach((x) => {
+    const n = Math.floor(x.i / 2) + 1, grave = x.perda >= 250;
+    const li = h(`<li><button type="button"><span class="tag ${grave ? "blunder" : "mistake"}">${grave ? "erro grave" : "imprecisão"}</span>
+      ${n}${x.m.color === "w" ? "." : "..."} ${quem(x.m.color)} <strong class="notation">${sanPt(x.m.san)}</strong>; melhor era <strong class="notation">${sanPt(x.melhor)}</strong>
+      <span style="color:var(--muted)">(${x.perda >= 1000 ? "entregou a partida" : `cerca de ${(x.perda / 100).toFixed(1).replace(".", ",")} ${x.perda >= 150 ? "peões" : "peão"} a menos`})</span></button></li>`);
+    li.querySelector("button").addEventListener("click", () => {
+      board.opts.getDests = null;
+      board.setFen(x.antes);
+      board.setLastMove(x.m.from, x.m.to);
+      board.setCheck(null);
+      board.setArrows([{ from: x.bm.from, to: x.bm.to }]);
+      if (status) status.textContent = "Destacado: o lance jogado. Seta: o melhor lance.";
+      board.el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    lista.appendChild(li);
+  });
+  return lista;
+}
+const resumoErros = (achados) => {
+  const graves = achados.filter((x) => x.perda >= 250).length, leves = achados.length - graves;
+  return `${graves} ${graves === 1 ? "erro grave" : "erros graves"} e ${leves} ${leves === 1 ? "imprecisão" : "imprecisões"}. Toque num lance para ver a posição.`;
+};
+const fensDe = (lances) => { const g = new Chess(), f = [g.fen()]; lances.forEach((m) => { g.move(m.san); f.push(g.fen()); }); return f; };
+
+async function copiarTexto(txt) {
+  try { await navigator.clipboard.writeText(txt); return true; } catch { return false; }
+}
+
 // ======================= jogar contra o computador =======================
 const NIVEIS_SF = [
   { skill: 0, depth: 1, d: "aprendendo as regras" },
@@ -512,25 +646,49 @@ function telaJogar() {
   const board = novoTabuleiro(tela.querySelector(".board-wrap"), {});
   const lado = tela.querySelector("#lado"), status = tela.querySelector("#status");
   tela.querySelector("#girar").addEventListener("click", () => board.flip());
-  let game = null, cor = "w", pensando = false, fimTxt = null, vivo = true;
+  let game = null, cor = "w", pensando = false, fimTxt = null, resultado = null, vivo = true;
   board.setFen(new Chess().fen());
+
+  // a partida em andamento fica salva a cada lance: dá para sair e voltar
+  const guardar = () => {
+    if (!game || fimTxt) return;
+    P.partidaAtual = { nivel, cor, lances: game.history(), em: Date.now() };
+    progresso.save(P);
+  };
+  const descartar = () => { delete P.partidaAtual; progresso.save(P); };
 
   function configurar() {
     game = null;
     board.opts.getDests = null;
     board.setArrows([]);
+    board.setFen(new Chess().fen());
+    board.setLastMove(null); board.setCheck(null);
     status.textContent = "";
     lado.innerHTML = "";
+    const salva = P.partidaAtual;
+    if (salva) {
+      const c = h(`<div class="panel destaque">
+        <p class="eyebrow">Partida em andamento</p>
+        <h2>Continuar de onde parou?</h2>
+        <p style="margin:6px 0 0">Nível ${salva.nivel + 1}, você de ${salva.cor === "w" ? "brancas" : "pretas"}, ${Math.ceil(salva.lances.length / 2)} ${Math.ceil(salva.lances.length / 2) === 1 ? "lance" : "lances"}. Começar uma nova partida apaga esta.</p>
+        <div class="btn-row" style="margin-top:14px"><button type="button" class="btn primary" id="continuar">Continuar partida</button></div>
+      </div>`);
+      c.querySelector("#continuar").addEventListener("click", () => comecar(salva));
+      lado.appendChild(c);
+      // mostra a posição salva no tabuleiro
+      try { const g = new Chess(); salva.lances.forEach((x) => g.move(x)); board.setOrientation(salva.cor); board.setFen(g.fen()); } catch {}
+    }
     const p = h(`<div class="panel">
-      <p class="eyebrow">Jogar</p><h2>Contra o computador</h2>
+      <p class="eyebrow">Jogar</p><h2>${salva ? "Ou comece outra" : "Contra o computador"}</h2>
       <p style="margin:14px 0 6px;font-weight:700">Nível</p>
       <div class="seg" id="niveis">${NIVEIS_SF.map((_, i) => `<button type="button" data-n="${i}" aria-pressed="${i === nivel}">${i + 1}</button>`).join("")}</div>
       <p id="desc" style="margin:6px 0 0;color:var(--muted)"></p>
       <p style="margin:16px 0 6px;font-weight:700">Suas peças</p>
       <div class="seg" id="cores"><button type="button" data-c="w" aria-pressed="true">Brancas</button><button type="button" data-c="b" aria-pressed="false">Pretas</button><button type="button" data-c="r" aria-pressed="false">Sorteio</button></div>
-      <div class="btn-row" style="margin-top:20px"><button type="button" class="btn primary" id="comecar">Começar partida</button></div>
+      <div class="btn-row" style="margin-top:20px"><button type="button" class="btn ${salva ? "" : "primary"}" id="comecar">${salva ? "Começar nova partida" : "Começar partida"}</button></div>
     </div>`);
     lado.appendChild(p);
+    lado.appendChild(h(`<p class="dica-analisar">Jogou uma partida no Lichess, no Chess.com ou num torneio? <a href="#/analisar">Analise a sua partida</a> e veja onde errou.</p>`));
     const desc = () => p.querySelector("#desc").textContent = `Nível ${nivel + 1}: ${NIVEIS_SF[nivel].d}.`;
     desc();
     p.querySelectorAll("#niveis button").forEach((b) => b.addEventListener("click", () => {
@@ -542,14 +700,17 @@ function telaJogar() {
       corEscolha = b.dataset.c;
       p.querySelectorAll("#cores button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
     }));
-    p.querySelector("#comecar").addEventListener("click", comecar);
+    p.querySelector("#comecar").addEventListener("click", () => comecar(null));
   }
 
-  function comecar() {
-    P.ultimoNivel = nivel; salvar();
-    cor = corEscolha === "r" ? (Math.random() < 0.5 ? "w" : "b") : corEscolha;
+  function comecar(salva) {
     game = new Chess();
-    fimTxt = null;
+    if (salva) {
+      nivel = salva.nivel; cor = salva.cor;
+      try { salva.lances.forEach((x) => game.move(x)); } catch { game = new Chess(); }
+    } else cor = corEscolha === "r" ? (Math.random() < 0.5 ? "w" : "b") : corEscolha;
+    P.ultimoNivel = nivel; salvar();
+    fimTxt = null; resultado = null;
     board.setOrientation(cor);
     board.setArrows([]);
     sync(board, game);
@@ -561,7 +722,7 @@ function telaJogar() {
     </div>`));
     lado.appendChild(h(`<div id="fb" aria-live="polite"></div>`));
     const acoes = h(`<div class="btn-row"></div>`);
-    [["Dica", dica], ["Desfazer", desfazer], ["Desistir", () => terminar("Você desistiu.", "derrota")], ["Nova partida", configurar]].forEach(([t, fn]) => {
+    [["Dica", dica], ["Desfazer", desfazer], ["Desistir", () => terminar("Você desistiu.", "derrota")], ["Nova partida", () => { descartar(); configurar(); }]].forEach(([t, fn]) => {
       const b = h(`<button type="button" class="btn">${t}</button>`); b.addEventListener("click", fn); acoes.appendChild(b);
     });
     lado.appendChild(acoes);
@@ -573,8 +734,9 @@ function telaJogar() {
       depois();
       return true;
     };
+    guardar();
     atualizar();
-    if (cor === "b") jogaComputador();
+    if (!verificarFim() && game.turn() !== cor) jogaComputador();
   }
 
   const fb = (tipo, txt) => { const el = lado.querySelector("#fb"); if (el) el.innerHTML = txt ? `<div class="feedback ${tipo}">${txt}</div>` : ""; };
@@ -587,6 +749,7 @@ function telaJogar() {
     status.textContent = game.inCheck() && !fimTxt ? "Xeque" : "";
   }
   function depois() {
+    guardar();
     atualizar();
     if (verificarFim()) return;
     if (game.turn() !== cor) jogaComputador();
@@ -607,20 +770,52 @@ function telaJogar() {
     else terminar(game.isStalemate() ? "Empate por afogamento." : game.isThreefoldRepetition() ? "Empate por repetição." : game.isInsufficientMaterial() ? "Empate: material insuficiente para dar mate." : "Empate.", "empate");
     return true;
   }
-  function terminar(txt, resultado) {
-    fimTxt = txt;
+  function terminar(txt, res) {
+    fimTxt = txt; resultado = res;
+    descartar();
     const t = lado.querySelector("#titulo");
-    if (t) t.textContent = resultado === "vitoria" ? "Vitória!" : resultado === "empate" ? "Empate" : "Fim de partida";
-    fb(resultado === "vitoria" ? "ok" : "info", txt);
-    P.partidas = (P.partidas || []).concat({ em: Date.now(), nivel: nivel + 1, cor, resultado, lances: game.history().length }).slice(-100);
+    if (t) t.textContent = res === "vitoria" ? "Vitória!" : res === "empate" ? "Empate" : "Fim de partida";
+    fb(res === "vitoria" ? "ok" : "info", txt);
+    if (res === "vitoria") sons.vitoria(); else sons.fim();
+    P.partidas = (P.partidas || []).concat({ em: Date.now(), nivel: nivel + 1, cor, resultado: res, lances: game.history().length }).slice(-100);
     progresso.treinou(P);
+    if (game.history().length >= 10) pontuar("partida");
     salvar();
+    botoesFim();
+  }
+  function botoesFim() {
     const acoes = lado.querySelector(".btn-row");
     acoes.innerHTML = "";
     const rev = h(`<button type="button" class="btn primary">Revisar a partida</button>`); rev.addEventListener("click", revisar);
+    const pgnB = h(`<button type="button" class="btn">Copiar PGN</button>`); pgnB.addEventListener("click", copiarPgn);
     const nova = h(`<button type="button" class="btn">Nova partida</button>`); nova.addEventListener("click", configurar);
-    if (game.history().length >= 2) acoes.appendChild(rev);
+    if (game.history().length >= 2) acoes.append(rev, pgnB);
     acoes.appendChild(nova);
+  }
+  // PGN: o formato que o Lichess, o Chess.com e qualquer programa de xadrez aceitam
+  function pgn() {
+    const g = new Chess();
+    game.history().forEach((x) => g.move(x));
+    const d = new Date(), comp = `Stockfish (nível ${nivel + 1})`;
+    const r = resultado === "empate" ? "1/2-1/2" : resultado === "vitoria" ? (cor === "w" ? "1-0" : "0-1") : resultado === "derrota" ? (cor === "w" ? "0-1" : "1-0") : "*";
+    g.setHeader("Event", "Chess Trail");
+    g.setHeader("Site", "https://chesstrail.github.io");
+    g.setHeader("Date", `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`);
+    g.setHeader("White", cor === "w" ? "Você" : comp);
+    g.setHeader("Black", cor === "b" ? "Você" : comp);
+    g.setHeader("Result", r);
+    return g.pgn();
+  }
+  async function copiarPgn() {
+    const txt = pgn();
+    if (await copiarTexto(txt)) fb("ok", "PGN copiado! Cole no Lichess (Ferramentas → Importar partida) ou no Chess.com para guardar a partida.");
+    else {
+      const t = h(`<textarea class="pgn-txt" rows="6" readonly aria-label="PGN da partida"></textarea>`);
+      t.value = txt;
+      lado.querySelector(".btn-row").before(t);
+      t.select();
+      fb("info", "Copie o PGN selecionado.");
+    }
   }
   async function dica() {
     if (fimTxt || pensando || game.turn() !== cor) return;
@@ -637,58 +832,167 @@ function telaJogar() {
     if (game.turn() !== cor) game.undo();
     board.setArrows([]);
     fb();
+    guardar();
     atualizar();
   }
 
-  // revisão: compara cada lance seu com o melhor lance, pela perda de avaliação
   async function revisar() {
-    const hist = game.history({ verbose: true }), meus = [];
-    const replay = new Chess();
-    hist.forEach((m, i) => { if (m.color === cor) meus.push({ i, antes: replay.fen(), m }); replay.move(m.san); });
+    const lances = game.history({ verbose: true }), fens = fensDe(lances);
     const acoes = lado.querySelector(".btn-row");
     acoes.innerHTML = "";
-    fb("info", `Analisando os seus ${meus.length} lances… <span id="prog">0%</span>`);
-    const achados = [];
-    for (let k = 0; k < meus.length && vivo; k++) {
-      const x = meus[k];
-      const a = await analyze({ fen: x.antes, depth: 10 });
-      const g2 = new Chess(x.antes); g2.move(x.m.san);
-      const d = await analyze({ fen: g2.fen(), depth: 10 });
-      const sinal = cor === "w" ? 1 : -1;
-      const clamp = (v) => Math.max(-1500, Math.min(1500, v));
-      const perda = a.best === uci(x.m) ? 0 : sinal * (clamp(whiteCp(a.score, x.antes)) - clamp(whiteCp(d.score, g2.fen())));
-      if (perda >= 110) {
-        const bm = parseUci(a.best), g3 = new Chess(x.antes);
-        const melhor = g3.move({ from: bm.from, to: bm.to, promotion: bm.promotion });
-        achados.push({ ...x, perda, melhor: melhor.san, bm });
-      }
-      const pr = document.getElementById("prog"); if (pr) pr.textContent = Math.round((k + 1) / meus.length * 100) + "%";
-    }
-    if (!vivo) return;
-    const graves = achados.filter((x) => x.perda >= 250).length;
-    fb(achados.length ? "info" : "ok", achados.length ? `${graves} erro(s) grave(s) e ${achados.length - graves} imprecisão(ões). Toque num lance para ver a posição.` : "Nenhum erro grave! Seus lances foram próximos do melhor.");
-    const lista = h(`<ul class="review-list"></ul>`);
-    achados.forEach((x) => {
-      const li = h(`<li><button type="button"><span class="tag ${x.perda >= 250 ? "blunder" : "mistake"}">${x.perda >= 250 ? "erro grave" : "imprecisão"}</span>
-        Lance ${Math.floor(x.i / 2) + 1}: você jogou <strong class="notation">${sanPt(x.m.san)}</strong>; melhor era <strong class="notation">${sanPt(x.melhor)}</strong>
-        <span style="color:var(--muted)">(cerca de ${(x.perda / 100).toFixed(1).replace(".", ",")} peão${x.perda >= 150 ? "s" : ""} a menos)</span></button></li>`);
-      li.querySelector("button").addEventListener("click", () => {
-        board.opts.getDests = null;
-        board.setFen(x.antes);
-        board.setLastMove(x.m.from, x.m.to);
-        board.setCheck(null);
-        board.setArrows([{ from: x.bm.from, to: x.bm.to }]);
-        status.textContent = "Destacado: o seu lance. Seta: o melhor lance.";
-      });
-      lista.appendChild(li);
-    });
-    acoes.before(lista);
+    const meus = lances.filter((m) => m.color === cor).length;
+    fb("info", `Analisando os seus ${meus} lances… <span id="prog">0%</span>`);
+    const achados = await analisarLances(lances, fens, [cor], (f) => { const pr = document.getElementById("prog"); if (pr) pr.textContent = Math.round(f * 100) + "%"; }, () => vivo);
+    if (!achados) return;
+    fb(achados.length ? "info" : "ok", achados.length ? resumoErros(achados) : "Nenhum erro grave! Seus lances foram próximos do melhor.");
+    acoes.before(listaDeErros(achados, board, status, () => "você jogou"));
+    const pgnB = h(`<button type="button" class="btn">Copiar PGN</button>`); pgnB.addEventListener("click", copiarPgn);
     const nova = h(`<button type="button" class="btn primary">Nova partida</button>`); nova.addEventListener("click", configurar);
-    acoes.appendChild(nova);
+    acoes.append(nova, pgnB);
   }
 
   configurar();
   atual = () => { vivo = false; };
+}
+
+// ======================= analisar uma partida sua (PGN) =======================
+function lerPgn(texto) {
+  const tentativas = [texto, texto.replace(/\{[^}]*\}/g, " ").replace(/\$\d+/g, " ")];
+  // remove variações entre parênteses (podem estar aninhadas)
+  let sem = tentativas[1];
+  for (let k = 0; k < 10 && /\([^()]*\)/.test(sem); k++) sem = sem.replace(/\([^()]*\)/g, " ");
+  tentativas.push(sem);
+  for (const t of tentativas) {
+    const g = new Chess();
+    try { g.loadPgn(t.trim()); if (g.history().length) return g; } catch {}
+  }
+  return null;
+}
+
+function telaAnalisar() {
+  app.innerHTML = "";
+  const tela = h(`<div class="trainer">
+    <div><div class="board-wrap"></div>
+      <div class="board-tools nav-lances" hidden>
+        <button type="button" class="icon-btn" id="ini" aria-label="Início">⏮</button>
+        <button type="button" class="icon-btn" id="ant" aria-label="Lance anterior">◀</button>
+        <span id="status"></span>
+        <button type="button" class="icon-btn" id="prox" aria-label="Próximo lance">▶</button>
+        <button type="button" class="icon-btn" id="fim" aria-label="Último lance">⏭</button>
+        <button type="button" class="icon-btn" id="girar" aria-label="Girar tabuleiro">⇅</button>
+      </div>
+    </div>
+    <div class="side" id="lado"></div></div>`);
+  app.appendChild(tela);
+  const board = novoTabuleiro(tela.querySelector(".board-wrap"), { interactive: false });
+  const lado = tela.querySelector("#lado"), status = tela.querySelector("#status"), nav = tela.querySelector(".nav-lances");
+  board.setFen(new Chess().fen());
+  let vivo = true, lances = [], fens = [], pos = 0, marcas = {};
+  tela.querySelector("#girar").addEventListener("click", () => board.flip());
+
+  // navegação: pos = quantos lances já foram jogados
+  const ir = (n) => {
+    pos = Math.max(0, Math.min(lances.length, n));
+    board.setFen(fens[pos]);
+    board.setArrows([]);
+    const m = lances[pos - 1];
+    board.setLastMove(m ? m.from : null, m ? m.to : null);
+    const g = new Chess(fens[pos]);
+    board.setCheck(g.inCheck() ? (g.board().flat().find((x) => x && x.type === "k" && x.color === g.turn()) || {}).square : null);
+    status.textContent = pos ? `${Math.ceil(pos / 2)}${pos % 2 ? "." : "..."} ${sanPt(m.san)}${marcas[pos - 1] ? " · " + (marcas[pos - 1].perda >= 250 ? "erro grave" : "imprecisão") : ""}` : "Posição inicial";
+    lado.querySelectorAll("#lances [data-i]").forEach((el) => el.classList.toggle("atual", Number(el.dataset.i) === pos - 1));
+  };
+  tela.querySelector("#ini").addEventListener("click", () => ir(0));
+  tela.querySelector("#ant").addEventListener("click", () => ir(pos - 1));
+  tela.querySelector("#prox").addEventListener("click", () => ir(pos + 1));
+  tela.querySelector("#fim").addEventListener("click", () => ir(lances.length));
+  const teclas = (e) => {
+    if (!lances.length || /input|textarea/i.test(document.activeElement?.tagName)) return;
+    if (e.key === "ArrowLeft") ir(pos - 1); else if (e.key === "ArrowRight") ir(pos + 1);
+  };
+  addEventListener("keydown", teclas);
+
+  function entrada(msgErro) {
+    nav.hidden = true;
+    lances = []; marcas = {};
+    board.setFen(new Chess().fen()); board.setArrows([]); board.setLastMove(null); board.setCheck(null);
+    lado.innerHTML = "";
+    const p = h(`<div class="panel">
+      <p class="eyebrow">Analisar</p><h2>Analise uma partida sua</h2>
+      <p style="margin:8px 0 0">Cole o <strong>PGN</strong> da partida. No Lichess: Compartilhar e exportar → PGN. No Chess.com: Compartilhar → PGN. Um lance por vez também serve, como <span class="notation">1. e4 e5 2. Nf3</span>.</p>
+      <textarea id="pgn" class="pgn-txt" rows="7" spellcheck="false" autocomplete="off" aria-label="PGN da partida" placeholder="[Event &quot;...&quot;]&#10;1. e4 e5 2. Nf3 Nc6 ..."></textarea>
+      <p style="margin:14px 0 6px;font-weight:700">Analisar os lances de</p>
+      <div class="seg" id="lado-an"><button type="button" data-c="w" aria-pressed="true">Brancas</button><button type="button" data-c="b" aria-pressed="false">Pretas</button><button type="button" data-c="wb" aria-pressed="false">Os dois</button></div>
+      <div class="btn-row" style="margin-top:18px"><button type="button" class="btn primary" id="analisar">Analisar partida</button></div>
+    </div>`);
+    lado.appendChild(p);
+    const fbEl = h(`<div id="fb" aria-live="polite">${msgErro ? `<div class="feedback bad">${msgErro}</div>` : ""}</div>`);
+    lado.appendChild(fbEl);
+    let cores = "w";
+    p.querySelectorAll("#lado-an button").forEach((b) => b.addEventListener("click", () => {
+      cores = b.dataset.c;
+      p.querySelectorAll("#lado-an button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    }));
+    // ao colar, tenta descobrir de que lado a pessoa jogou pelo nome repetido entre partidas
+    p.querySelector("#pgn").addEventListener("input", (e) => {
+      const nomeB = e.target.value.match(/\[White "([^"]+)"\]/)?.[1], nomeP = e.target.value.match(/\[Black "([^"]+)"\]/)?.[1];
+      const eu = P.meuNome;
+      if (eu && (nomeB === eu || nomeP === eu)) p.querySelector(`#lado-an [data-c="${nomeB === eu ? "w" : "b"}"]`).click();
+    });
+    p.querySelector("#analisar").addEventListener("click", () => {
+      const texto = p.querySelector("#pgn").value;
+      const g = lerPgn(texto);
+      if (!g) { fbEl.innerHTML = `<div class="feedback bad">Não consegui ler essa partida. Confira se o PGN foi copiado inteiro.</div>`; return; }
+      const hd = g.getHeaders();
+      if (cores !== "wb") { const nome = hd[cores === "w" ? "White" : "Black"]; if (nome && nome !== "?") { P.meuNome = nome; progresso.save(P); } }
+      analisar(g, cores.split(""), hd);
+    });
+  }
+
+  async function analisar(g, cores, hd) {
+    lances = g.history({ verbose: true });
+    fens = fensDe(lances);
+    marcas = {};
+    board.setOrientation(cores.length === 1 ? cores[0] : "w");
+    nav.hidden = false;
+    lado.innerHTML = "";
+    const titulo = hd.White && hd.Black && hd.White !== "?" ? `${hd.White} × ${hd.Black}` : "Sua partida";
+    lado.appendChild(h(`<div class="panel">
+      <p class="eyebrow">Análise${hd.Result && hd.Result !== "*" ? " · resultado " + hd.Result : ""}</p>
+      <h2>${titulo.replace(/</g, "&lt;")}</h2>
+      <div class="moves" id="lances" style="margin-top:12px"></div>
+    </div>`));
+    const lancesEl = lado.querySelector("#lances");
+    const desenhar = () => {
+      lancesEl.innerHTML = lances.map((m, i) => (i % 2 === 0 ? `<span class="n">${i / 2 + 1}.</span>` : "") +
+        `<button type="button" data-i="${i}" class="lance${marcas[i] ? (marcas[i].perda >= 250 ? " grave" : " leve") : ""}">${sanPt(m.san)}</button> `).join("");
+      lancesEl.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => ir(Number(b.dataset.i) + 1)));
+    };
+    desenhar();
+    ir(lances.length);
+    const fbEl = h(`<div id="fb" aria-live="polite"></div>`);
+    lado.appendChild(fbEl);
+    const n = lances.filter((m) => cores.includes(m.color)).length;
+    fbEl.innerHTML = `<div class="feedback info">Analisando ${n} lances com o Stockfish… <span id="prog">0%</span></div>`;
+    const achados = await analisarLances(lances, fens, cores, (f) => { const pr = document.getElementById("prog"); if (pr) pr.textContent = Math.round(f * 100) + "%"; }, () => vivo);
+    if (!achados) return;
+    achados.forEach((x) => marcas[x.i] = x);
+    desenhar();
+    ir(pos);
+    fbEl.innerHTML = `<div class="feedback ${achados.length ? "info" : "ok"}">${achados.length ? resumoErros(achados) : "Nenhum erro grave nos lances analisados!"}</div>`;
+    const nomes = { w: "as brancas jogaram", b: "as pretas jogaram" };
+    if (achados.length) lado.appendChild(listaDeErros(achados, board, status, (c) => (cores.length === 1 ? "você jogou" : nomes[c])));
+    const acoes = h(`<div class="btn-row"></div>`);
+    const outra = h(`<button type="button" class="btn">Analisar outra partida</button>`); outra.addEventListener("click", () => entrada());
+    acoes.appendChild(outra);
+    lado.appendChild(acoes);
+    pontuar("analise");
+    progresso.treinou(P);
+    salvar();
+  }
+
+  entrada();
+  atual = () => { vivo = false; removeEventListener("keydown", teclas); };
 }
 
 // ======================= revisão espaçada =======================
@@ -738,7 +1042,8 @@ function telaRevisar() {
     titulo.textContent = `${j + 1} de ${fila.length}`;
     const terminar = (acertou, msg) => {
       revisao.registrar(P, r.k, acertou);
-      if (acertou) acertos++;
+      if (acertou) { acertos++; sons.acerto(); }
+      pontuar("revisao");
       progresso.treinou(P);
       salvar();
       feedback(acertou ? "ok" : "info", msg);
@@ -781,9 +1086,10 @@ function rota() {
   else if (pagina === "puzzles") telaPuzzles();
   else if (pagina === "jogar") telaJogar();
   else if (pagina === "revisar") telaRevisar();
+  else if (pagina === "analisar") telaAnalisar();
   else telaInicio();
   topo();
-  document.title = (pagina === "licao" && licao(arg) ? licao(arg).titulo + " · " : pagina === "puzzles" ? "Puzzles · " : pagina === "jogar" ? "Jogar · " : pagina === "revisar" ? "Revisar · " : "") + "Chess Trail";
+  document.title = (pagina === "licao" && licao(arg) ? licao(arg).titulo + " · " : pagina === "puzzles" ? "Puzzles · " : pagina === "jogar" ? "Jogar · " : pagina === "revisar" ? "Revisar · " : pagina === "analisar" ? "Analisar · " : "") + "Chess Trail";
 }
 // progresso vindo do endereço antigo: o redirecionamento manda o código no link (#importar=TX1...)
 async function importarDoLink() {

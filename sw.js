@@ -1,10 +1,10 @@
 // Funciona sem internet: guarda o site inteiro no aparelho na primeira visita.
 // Código e dados: busca a versão nova na rede e cai no que está guardado se não houver
 // conexão. Peças, motor e fontes: usa o guardado direto (não mudam).
-const CACHE = "chesstrail-v1";
+const CACHE = "chesstrail-v2";
 const ARQUIVOS = [
   "./", "index.html", "manifest.webmanifest", "css/app.css",
-  "js/app.js", "js/board.js", "js/engine.js", "js/lessons.js", "js/linha.js", "js/progress.js", "js/puzzle.js", "js/revisao.js", "js/rules.js",
+  "js/app.js", "js/board.js", "js/engine.js", "js/lessons.js", "js/linha.js", "js/metas.js", "js/progress.js", "js/puzzle.js", "js/revisao.js", "js/rules.js", "js/sons.js",
   "data/puzzles.json", "vendor/chess.js", "vendor/stockfish/stockfish-19-lite-single.js", "vendor/stockfish/stockfish-19-lite-single.wasm",
   "assets/icon-192.png", "assets/icon-512.png",
   ...["K", "Q", "R", "B", "N", "P"].flatMap((p) => [`assets/pieces/w${p}.svg`, `assets/pieces/b${p}.svg`]),

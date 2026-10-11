@@ -1,5 +1,6 @@
 // Tabuleiro interativo: tocar (peça, depois casa) ou arrastar. Não conhece as regras:
 // quem usa informa os lances possíveis (dests) e decide se um lance vale (onMove).
+import * as sons from "./sons.js";
 
 const FILES = "abcdefgh";
 const PIECE_URL = (p) => `assets/pieces/${p}.svg`; // p = "wK", "bP"...
@@ -134,6 +135,7 @@ export class Board {
   flash(sq, kind, ms = 700) {
     const s = this.squares[sq];
     if (!s) return;
+    if (kind === "bad") sons.erro();
     s.classList.add(kind);
     setTimeout(() => s.classList.remove(kind), ms);
   }

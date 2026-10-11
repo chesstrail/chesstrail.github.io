@@ -1,5 +1,6 @@
 // Ponte entre o chess.js (regras) e o tabuleiro.
 import { Chess } from "../vendor/chess.js";
+import * as sons from "./sons.js";
 
 export { Chess };
 
@@ -29,6 +30,10 @@ export const parseUci = (s) => ({ from: s.slice(0, 2), to: s.slice(2, 4), promot
 export function sync(board, game) {
   board.setFen(game.fen());
   const hist = game.history({ verbose: true }), last = hist[hist.length - 1];
+  // som só quando a partida avançou um lance (não ao abrir uma posição nem ao desfazer)
+  if (board._somJogo === game && hist.length === board._somN + 1 && last) sons.doLance(last, game.inCheck());
+  board._somJogo = game;
+  board._somN = hist.length;
   board.setLastMove(last ? last.from : null, last ? last.to : null);
   board.setCheck(checkSquare(game));
 }
