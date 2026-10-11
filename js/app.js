@@ -107,7 +107,14 @@ function telaLicao(id) {
   const marcarPassos = () => tela.querySelectorAll(".steps i").forEach((el, i) => el.className = i < k ? "done" : i === k ? "now" : "");
   const concluirPasso = (msg) => {
     if (msg) feedback("ok", msg);
-    botoes([botao(k + 1 < L.passos.length ? "Continuar" : "Concluir lição", "primary", () => { k++; passo(); })]);
+    const prox = LICOES[n] || null;
+    if (k + 1 < L.passos.length) botoes([botao("Continuar", "primary", () => { k++; passo(); })]);
+    else if (prox) botoes([
+      // último passo: dá para pular direto para a próxima lição, sem a tela de resumo
+      botao(`Próxima lição: ${prox.titulo} →`, "primary", () => { marcarConcluida(); location.hash = `#/licao/${prox.id}`; }),
+      botao("Concluir lição", "", () => { k++; passo(); }),
+    ]);
+    else botoes([botao("Concluir lição", "primary", () => { k++; passo(); })]);
     acoes.querySelector("button").focus({ preventScroll: true });
   };
   const resetBoard = (fen, opts = {}) => {
@@ -365,10 +372,13 @@ function telaLicao(id) {
     }
   }
 
-  function concluirLicao() {
+  function marcarConcluida() {
     P.licoes[L.id] = { em: Date.now() };
     progresso.treinou(P);
     salvar();
+  }
+  function concluirLicao() {
+    marcarConcluida();
     const prox = LICOES[n] || null;
     box.innerHTML = `<p class="eyebrow">Lição concluída</p><h3>${L.titulo} ✓</h3><p style="margin-top:8px">${prox ? `Próxima: <strong>${prox.titulo}</strong> — ${prox.resumo}` : "Você completou a trilha inteira! Continue treinando nos puzzles e nas partidas."}</p>`;
     feedback();
